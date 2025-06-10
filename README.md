@@ -148,5 +148,278 @@
 
 ### **开发环境**
 - **容器化**: Docker + Docker Compose
+- **包管理**: uv (Python)
 - **数据库**: PostgreSQL 15
 - **缓存**: Redis 7
+
+## **快速开始**
+
+### **环境要求**
+- Python 3.11+
+- Docker & Docker Compose
+- uv (Python包管理器)
+
+### **安装步骤**
+
+1. **克隆项目**
+```bash
+git clone <repository-url>
+cd EvoFlow
+```
+
+2. **配置环境变量**
+```bash
+cp .env.example .env
+# 编辑.env文件，配置数据库和API密钥
+```
+
+3. **使用Docker启动（推荐）**
+```bash
+# 启动所有服务
+chmod +x scripts/start.sh
+./scripts/start.sh
+
+# 或者使用docker-compose
+docker-compose up -d
+```
+
+4. **开发环境启动**
+```bash
+# 启动开发环境
+chmod +x scripts/dev.sh
+./scripts/dev.sh
+```
+
+### **访问应用**
+- API文档: http://localhost:8000/docs
+- 健康检查: http://localhost:8000/health
+- API接口: http://localhost:8000/api/v1
+
+## **项目结构**
+
+```
+EvoFlow/
+├── evoflow/                    # 主应用目录
+│   ├── __init__.py
+│   ├── main.py                 # FastAPI应用入口
+│   ├── config.py               # 配置管理
+│   ├── database.py             # 数据库配置
+│   ├── celery_app.py           # Celery配置
+│   ├── models/                 # 数据模型
+│   │   ├── user.py
+│   │   ├── workflow.py
+│   │   ├── agent.py
+│   │   └── task.py
+│   ├── schemas/                # Pydantic模式
+│   │   ├── workflow.py
+│   │   └── agent.py
+│   ├── api/                    # API路由
+│   │   └── v1/
+│   │       ├── workflows.py
+│   │       ├── agents.py
+│   │       └── executions.py
+│   ├── agents/                 # Agent实现
+│   │   ├── base.py
+│   │   ├── web_search.py
+│   │   ├── text_writing.py
+│   │   ├── data_analysis.py
+│   │   ├── email_sender.py
+│   │   └── file_processor.py
+│   ├── workflow/               # 工作流引擎
+│   │   ├── dag.py
+│   │   ├── engine.py
+│   │   └── executor.py
+│   ├── tasks/                  # Celery任务
+│   │   ├── workflow_tasks.py
+│   │   └── agent_tasks.py
+│   └── utils/                  # 工具函数
+│       ├── logger.py
+│       └── validators.py
+├── examples/                   # 示例代码
+│   ├── simple_workflow.py
+│   └── test_agents.py
+├── scripts/                    # 启动脚本
+│   ├── start.sh
+│   ├── stop.sh
+│   ├── dev.sh
+│   └── init.sql
+├── tests/                      # 测试文件
+├── logs/                       # 日志目录
+├── docker-compose.yml          # Docker编排
+├── Dockerfile                  # Docker镜像
+├── pyproject.toml              # Python项目配置
+├── .env                        # 环境变量
+└── README.md                   # 项目文档
+```
+
+## **核心功能**
+
+### **1. Agent系统**
+- **WebSearchAgent**: 网络搜索功能
+- **TextWritingAgent**: 基于DeepSeek的文本生成
+- **DataAnalysisAgent**: 数据分析和统计
+- **EmailSenderAgent**: 邮件发送功能
+- **FileProcessorAgent**: 文件处理和格式转换
+
+### **2. 工作流引擎**
+- **DAG构建**: 支持复杂的有向无环图工作流
+- **并行执行**: 自动识别可并行执行的任务
+- **错误处理**: 支持重试和容错机制
+- **状态管理**: 实时跟踪执行状态
+- **上下文传递**: 节点间数据流管理
+
+### **3. API接口**
+- **工作流管理**: 创建、更新、删除工作流
+- **执行控制**: 启动、取消、监控执行
+- **Agent管理**: 查看、测试、配置Agent
+- **执行历史**: 查看执行记录和日志
+
+## **使用示例**
+
+### **创建简单工作流**
+
+```python
+from evoflow.workflow.dag import DAGNode, WorkflowDAG
+
+# 创建节点
+nodes = [
+    DAGNode(
+        id="search",
+        name="搜索信息",
+        agent_type="web_search",
+        input_data={"query": "AI最新发展", "max_results": 5}
+    ),
+    DAGNode(
+        id="analyze",
+        name="分析结果",
+        agent_type="text_writing",
+        input_data={
+            "prompt": "分析搜索结果: ${dependency_search}",
+            "max_tokens": 1000
+        },
+        dependencies=["search"]
+    )
+]
+
+# 创建并执行工作流
+dag = WorkflowDAG(nodes)
+engine = WorkflowEngine()
+execution_id = await engine.execute_workflow("workflow_001", dag.to_dict())
+```
+
+### **测试Agent功能**
+
+```python
+from evoflow.agents import TextWritingAgent
+
+agent = TextWritingAgent()
+result = await agent.run({
+    "prompt": "写一篇关于AI的文章",
+    "max_tokens": 500
+}, {})
+
+print(f"生成结果: {result.data['generated_text']}")
+```
+
+## **API使用**
+
+### **创建工作流**
+```bash
+curl -X POST "http://localhost:8000/api/v1/workflows/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "示例工作流",
+    "description": "这是一个示例工作流",
+    "dag_definition": {
+      "nodes": [...]
+    }
+  }'
+```
+
+### **执行工作流**
+```bash
+curl -X POST "http://localhost:8000/api/v1/workflows/{workflow_id}/execute" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input_data": {"key": "value"}
+  }'
+```
+
+### **查看执行状态**
+```bash
+curl "http://localhost:8000/api/v1/executions/{execution_id}"
+```
+
+## **开发指南**
+
+### **添加新的Agent**
+
+1. 继承BaseAgent类
+2. 实现必需的方法
+3. 在TaskExecutor中注册
+4. 添加相应的测试
+
+```python
+class CustomAgent(BaseAgent):
+    def __init__(self, config=None):
+        super().__init__("CustomAgent", "custom", ["capability1"], config)
+
+    async def execute(self, input_data, context):
+        # 实现具体逻辑
+        pass
+
+    def validate_input(self, input_data):
+        # 验证输入
+        pass
+
+    def get_cost_estimate(self, input_data):
+        # 成本估算
+        pass
+```
+
+### **运行测试**
+```bash
+# 安装测试依赖
+uv pip install -e ".[dev]"
+
+# 运行测试
+pytest tests/
+
+# 运行示例
+python examples/test_agents.py
+python examples/simple_workflow.py
+```
+
+## **部署**
+
+### **生产环境部署**
+1. 修改环境变量配置
+2. 使用生产级数据库
+3. 配置负载均衡
+4. 设置监控和日志
+
+### **Docker部署**
+```bash
+# 构建镜像
+docker build -t evoflow:latest .
+
+# 运行容器
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+## **贡献指南**
+
+1. Fork项目
+2. 创建功能分支
+3. 提交更改
+4. 创建Pull Request
+
+## **许可证**
+
+MIT License
+
+## **联系方式**
+
+- 项目地址: [GitHub Repository]
+- 问题反馈: [Issues]
+- 邮箱: team@evoflow.ai
