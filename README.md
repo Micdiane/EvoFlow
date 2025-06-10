@@ -418,8 +418,241 @@ docker-compose -f docker-compose.prod.yml up -d
 
 MIT License
 
+## **项目状态**
+
+### **✅ 已完成功能 (MVP Phase 1)**
+
+**核心架构**
+- [x] FastAPI后端框架搭建
+- [x] PostgreSQL数据库设计和模型
+- [x] Redis缓存和任务队列
+- [x] Docker + uv开发环境
+- [x] Alembic数据库迁移
+
+**Agent系统**
+- [x] BaseAgent抽象基类
+- [x] WebSearchAgent - 网络搜索
+- [x] TextWritingAgent - DeepSeek文本生成
+- [x] DataAnalysisAgent - 数据分析
+- [x] EmailSenderAgent - 邮件发送
+- [x] FileProcessorAgent - 文件处理
+
+**工作流引擎**
+- [x] DAG有向无环图构建
+- [x] 工作流执行引擎
+- [x] 任务调度和状态管理
+- [x] 错误处理和重试机制
+- [x] 上下文数据传递
+
+**API接口**
+- [x] RESTful API设计
+- [x] 工作流CRUD操作
+- [x] Agent管理和测试
+- [x] 执行监控和日志
+- [x] 自动API文档生成
+
+**开发工具**
+- [x] 项目设置检查脚本
+- [x] API测试脚本
+- [x] 性能监控脚本
+- [x] 数据初始化脚本
+
+**部署支持**
+- [x] Docker Compose开发环境
+- [x] 生产环境Docker配置
+- [x] Nginx反向代理配置
+- [x] 自动化部署脚本
+
+### **🚧 下一步计划 (Phase 2)**
+
+**智能工作流生成**
+- [ ] 自然语言任务分解
+- [ ] Planner Agent实现
+- [ ] Agent智能匹配算法
+- [ ] 工作流模板库
+
+**前端界面**
+- [ ] Next.js前端项目初始化
+- [ ] 工作流可视化编辑器
+- [ ] 实时执行监控界面
+- [ ] Agent管理界面
+
+**用户系统**
+- [ ] 用户认证和授权
+- [ ] JWT Token管理
+- [ ] 用户权限控制
+- [ ] 多租户支持
+
+**高级功能**
+- [ ] 工作流版本控制
+- [ ] 条件分支和循环
+- [ ] 人机协作节点
+- [ ] 工作流调试模式
+
+### **🔮 未来规划 (Phase 3+)**
+
+**优化与学习**
+- [ ] 执行性能分析
+- [ ] 用户反馈收集
+- [ ] 强化学习优化
+- [ ] 成本智能控制
+
+**生态建设**
+- [ ] Agent插件市场
+- [ ] 社区贡献系统
+- [ ] 工作流分享平台
+- [ ] 第三方集成
+
+**企业功能**
+- [ ] 高级监控和告警
+- [ ] 数据安全和合规
+- [ ] 企业级部署方案
+- [ ] 专业技术支持
+
+## **快速验证**
+
+### **1. 环境检查**
+```bash
+# 检查项目设置
+python scripts/check_setup.py
+
+# 或者给脚本执行权限
+chmod +x scripts/check_setup.py
+./scripts/check_setup.py
+```
+
+### **2. 启动服务**
+```bash
+# 开发环境启动
+chmod +x scripts/start.sh
+./scripts/start.sh
+
+# 或者手动启动
+docker-compose up -d
+```
+
+### **3. API测试**
+```bash
+# 运行API测试
+python scripts/test_api.py
+
+# 或者手动测试
+curl http://localhost:8000/health
+curl http://localhost:8000/docs
+```
+
+### **4. 性能监控**
+```bash
+# 运行监控脚本
+python scripts/monitor.py
+
+# 持续监控
+python scripts/monitor.py --interval 30
+```
+
+## **故障排除**
+
+### **常见问题**
+
+**1. Docker服务启动失败**
+```bash
+# 检查Docker状态
+docker info
+
+# 查看服务日志
+docker-compose logs
+
+# 重启服务
+docker-compose restart
+```
+
+**2. 数据库连接失败**
+```bash
+# 检查数据库状态
+docker-compose exec postgres pg_isready -U evoflow
+
+# 查看数据库日志
+docker-compose logs postgres
+```
+
+**3. API响应慢或超时**
+```bash
+# 检查系统资源
+python scripts/monitor.py --once
+
+# 查看API日志
+docker-compose logs backend
+```
+
+**4. Agent执行失败**
+- 检查DeepSeek API密钥是否正确
+- 确认网络连接正常
+- 查看具体错误信息
+
+### **日志查看**
+```bash
+# 查看所有服务日志
+docker-compose logs -f
+
+# 查看特定服务日志
+docker-compose logs -f backend
+docker-compose logs -f celery_worker
+
+# 查看应用日志文件
+tail -f logs/evoflow.log
+```
+
+## **贡献指南**
+
+### **开发流程**
+1. Fork项目到个人仓库
+2. 创建功能分支: `git checkout -b feature/new-feature`
+3. 提交更改: `git commit -am 'Add new feature'`
+4. 推送分支: `git push origin feature/new-feature`
+5. 创建Pull Request
+
+### **代码规范**
+- 使用Black进行代码格式化
+- 遵循PEP 8编码规范
+- 添加类型注解
+- 编写单元测试
+- 更新文档
+
+### **测试要求**
+```bash
+# 运行测试
+pytest tests/
+
+# 代码格式检查
+black --check evoflow/
+isort --check-only evoflow/
+
+# 类型检查
+mypy evoflow/
+```
+
+## **许可证**
+
+本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
+
+## **致谢**
+
+感谢以下开源项目和技术：
+- FastAPI - 现代高性能Web框架
+- SQLAlchemy - Python SQL工具包
+- Celery - 分布式任务队列
+- Redis - 内存数据结构存储
+- PostgreSQL - 开源关系型数据库
+- Docker - 容器化平台
+- DeepSeek - 大语言模型API
+
 ## **联系方式**
 
 - 项目地址: [GitHub Repository]
 - 问题反馈: [Issues]
 - 邮箱: team@evoflow.ai
+- 文档: [Documentation]
+
+---
+
+**EvoFlow** - 让AI工作流自动化变得简单而强大 🚀
