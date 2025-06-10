@@ -1,0 +1,228 @@
+version: '3.8'
+
+services:
+  # Nginx反向代理
+  nginx:
+    image: nginx:alpine
+    container_name: evoflow_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./logs/nginx:/var/log/nginx
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - evoflow_network
+
+  # PostgreSQL数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: evoflow_postgres_prod
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-evoflow}
+      POSTGRES_USER: ${POSTGRES_USER:-evoflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-evoflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - evoflow_network
+
+  # Redis缓存
+  redis:
+    image: redis:7-alpine
+    container_name: evoflow_redis_prod
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_prod:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - evoflow_network
+
+  # FastAPI后端应用
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: evoflow_backend_prod
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-evoflow}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-evoflow}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+      - ENVIRONMENT=production
+    volumes:
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - evoflow_network
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Celery Worker
+  celery_worker:
+    build: 
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: evoflow_celery_worker_prod
+    command: celery -A evoflow.celery_app worker --loglevel=info --concurrency=4
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-evoflow}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-evoflow}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+      - ENVIRONMENT=production
+    volumes:
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - evoflow_network
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+  # Celery Beat (定时任务调度器)
+  celery_beat:
+    build: 
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: evoflow_celery_beat_prod
+    command: celery -A evoflow.celery_app beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-evoflow}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-evoflow}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+      - ENVIRONMENT=production
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - evoflow_network
+
+  # Flower (Celery监控)
+  flower:
+    build: 
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: evoflow_flower_prod
+    command: celery -A evoflow.celery_app flower --port=5555
+    environment:
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - FLOWER_BASIC_AUTH=${FLOWER_USER:-admin}:${FLOWER_PASSWORD}
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - evoflow_network
+
+  # Prometheus监控
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: evoflow_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - evoflow_network
+
+  # Grafana可视化
+  grafana:
+    image: grafana/grafana:latest
+    container_name: evoflow_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - evoflow_network
+
+volumes:
+  postgres_data_prod:
+  redis_data_prod:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  evoflow_network:
+    driver: bridge
