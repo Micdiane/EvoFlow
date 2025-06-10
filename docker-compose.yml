@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  # PostgreSQL数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: evoflow_postgres
+    environment:
+      POSTGRES_DB: evoflow
+      POSTGRES_USER: evoflow
+      POSTGRES_PASSWORD: evoflow_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evoflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis缓存
+  redis:
+    image: redis:7-alpine
+    container_name: evoflow_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI后端应用
+  backend:
+    build: .
+    container_name: evoflow_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://evoflow:evoflow_password@postgres:5432/evoflow
+      - REDIS_URL=redis://redis:6379/0
+      - DEEPSEEK_API_KEY=sk-416899217f794138a8dcd01b75ae1101
+      - SECRET_KEY=your-secret-key-change-in-production
+      - DEBUG=true
+    volumes:
+      - .:/app
+      - /app/.venv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn evoflow.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Celery Worker
+  celery_worker:
+    build: .
+    container_name: evoflow_celery_worker
+    environment:
+      - DATABASE_URL=postgresql://evoflow:evoflow_password@postgres:5432/evoflow
+      - REDIS_URL=redis://redis:6379/0
+      - DEEPSEEK_API_KEY=sk-416899217f794138a8dcd01b75ae1101
+    volumes:
+      - .:/app
+      - /app/.venv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A evoflow.celery_app worker --loglevel=info
+
+  # Celery Beat (定时任务调度器)
+  celery_beat:
+    build: .
+    container_name: evoflow_celery_beat
+    environment:
+      - DATABASE_URL=postgresql://evoflow:evoflow_password@postgres:5432/evoflow
+      - REDIS_URL=redis://redis:6379/0
+      - DEEPSEEK_API_KEY=sk-416899217f794138a8dcd01b75ae1101
+    volumes:
+      - .:/app
+      - /app/.venv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A evoflow.celery_app beat --loglevel=info
+
+volumes:
+  postgres_data:
+  redis_data:
